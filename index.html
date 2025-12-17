@@ -1,11 +1,52 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>ZaruBall Debugger</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <h1>hello world</h1>
+    <div class="container">
+        <header>
+            <h1>ZaruBall Debugger</h1>
+            <p class="subtitle">反応しないキーを選択して、故障箇所を特定します</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <label for="folderInput" class="upload-label">
+                    <span class="icon">📂</span>
+                    <span class="text">ZMK Configフォルダを選択 (config)</span>
+                    <input type="file" id="folderInput" webkitdirectory directory multiple>
+                </label>
+                <div id="statusMessage" class="status-message"></div>
+            </div>
+
+            <div id="debugInterface" class="hidden">
+                <div class="canvas-container">
+                    <canvas id="keyboardCanvas"></canvas>
+                </div>
+
+                <div class="controls">
+                    <button id="resetBtn" class="btn btn-secondary">リセット</button>
+                    <button id="diagnoseBtn" class="btn btn-primary">診断する</button>
+                </div>
+
+                <div id="resultArea" class="result-area hidden">
+                    <h2>診断結果</h2>
+                    <div id="resultContent"></div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Based on ZaruBall Firmware Configuration</p>
+        </footer>
+    </div>
+    <script src="script.js"></script>
 </body>
-</html> 
+</html>

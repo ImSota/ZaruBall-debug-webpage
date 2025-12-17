@@ -1,0 +1,226 @@
+:root {
+    --bg-color: #f8fafc;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --accent-color: #3b82f6;
+    --accent-hover: #2563eb;
+    --danger-color: #ef4444;
+    --border-color: #e2e8f0;
+    --card-bg: #ffffff;
+    --key-default: #e2e8f0;
+    --key-stroke: #94a3b8;
+    --key-selected: #fca5a5; /* Red-ish for error */
+    --key-selected-stroke: #dc2626;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    line-height: 1.5;
+    padding: 2rem;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+header {
+    text-align: center;
+}
+
+h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+}
+
+main {
+    background: var(--card-bg);
+    border-radius: 1rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.upload-section {
+    width: 100%;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.upload-label {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    border: 2px dashed var(--border-color);
+    border-radius: 1rem;
+    cursor: pointer;
+    background-color: #f1f5f9;
+    transition: all 0.2s;
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.upload-label:hover {
+    border-color: var(--accent-color);
+    background-color: #eff6ff;
+}
+
+.upload-label .icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.upload-label input {
+    display: none;
+}
+
+.status-message {
+    margin-top: 1rem;
+    min-height: 1.5rem;
+    font-weight: 500;
+}
+
+.status-message.error {
+    color: var(--danger-color);
+}
+
+.status-message.success {
+    color: #059669;
+}
+
+#debugInterface {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#debugInterface.hidden {
+    display: none;
+}
+
+.canvas-container {
+    width: 100%;
+    overflow-x: auto;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2rem;
+    cursor: crosshair;
+}
+
+#keyboardCanvas {
+    /* Border handled by logic drawing if needed, or remove this */
+}
+
+.controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    font-size: 1rem;
+}
+
+.btn-primary {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-secondary {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+}
+
+.result-area {
+    width: 100%;
+    background-color: #fff1f2; /* Light red/pink bg */
+    border: 1px solid #fecdd3;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+}
+
+.result-area.hidden {
+    display: none;
+}
+
+.result-area h2 {
+    color: #9f1239;
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.diagnosis-list {
+    list-style: none;
+}
+
+.diagnosis-item {
+    background: white;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    border-radius: 0.5rem;
+    border-left: 4px solid var(--danger-color);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.diagnosis-item strong {
+    display: block;
+    color: #881337;
+    margin-bottom: 0.25rem;
+}
+
+.diagnosis-item p {
+    font-size: 0.95rem;
+    color: #4b5563;
+}
+
+footer {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-top: 2rem;
+}
