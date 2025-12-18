@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,20 +10,22 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>ZaruBall Debugger</h1>
-            <p class="subtitle">反応しないキーを選択して、故障箇所を特定します</p>
+            <h1>ZMK Debugger</h1>
+            <p class="subtitle">反応しないキーを選択して、故障箇所を特定</p>
         </header>
 
         <main>
             <div class="upload-section">
-                <label for="folderInput" class="upload-label">
-                    <span class="icon">📂</span>
-                    <span class="text">ZMK Configフォルダを選択 (config)</span>
-                    <input type="file" id="folderInput" webkitdirectory directory multiple>
-                </label>
+                <div class="input-group">
+                    <input type="text" id="repoInput"
+                        placeholder="GitHub Repository (e.g. sota-h/ZaruBall-firmware-private)" class="repo-input">
+                    <button id="loadBtn" class="btn btn-primary">Load Repository</button>
+                    <!-- <button id="loadFolderBtn" class="btn btn-secondary">またはフォルダを選択</button> -->
+                </div>
                 <div id="statusMessage" class="status-message"></div>
             </div>
 
@@ -33,11 +36,14 @@
 
                 <div class="controls">
                     <button id="resetBtn" class="btn btn-secondary">リセット</button>
-                    <button id="diagnoseBtn" class="btn btn-primary">診断する</button>
+                    <button id="diagnoseBtn" class="btn btn-primary">診断する (Diagnose)</button>
+                    <button id="dlTemplateBtn" class="btn btn-secondary hidden"
+                        style="background-color: #f0fdf4; color: #15803d; border-color: #86efac;">DBテンプレート (DL
+                        Template)</button>
                 </div>
 
                 <div id="resultArea" class="result-area hidden">
-                    <h2>診断結果</h2>
+                    <h2>診断結果 (Diagnosis Result)</h2>
                     <div id="resultContent"></div>
                 </div>
             </div>
@@ -49,4 +55,5 @@
     </div>
     <script src="script.js"></script>
 </body>
+
 </html>

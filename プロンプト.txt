@@ -1,25 +1,80 @@
 要件定義
 自作キーボードZaruBallの組み立て時に起きた不具合の症状を元にどのパーツに問題があるかを表示するwebサイトをgithub pageを使用して作成する。まずは要件定義書をrequirements.mdとして作成。
 
-キーボードの配列をファームウェアの設定ファイルを元に画面上に再現し、不具合のあるキーを複数選択。決定ボタンを押すことで不具合のあるパーツ(ダイオード、スイッチソケット、マイコンのGPIOピン)を推測してくれる。
+現状のシステムではフォルダを選択することでファームウェアを解析しているが、ファームウェアのgithubリポジトリを選択し、そのリポジトリ内のデータを解析したい。そして配列を再現したり不具合箇所を推測する。これによって他のキーボードでも同じような不具合を防ぐことができるようにしたい。
 
-zmk-config-ZaruBallフォルダの中はZaruBall用のファームウェアの設定ファイルが含まれている。これらの情報をもとに、画面上にキーボードの配列を再現すること。
+githubリポジトリのデータをもとに再現されたキーボードの配列を画面上に再現し、不具合のあるキーを複数選択。決定ボタンを押すことで不具合のあるパーツ(ダイオード、スイッチソケット、マイコンのGPIOピン)を推測してくれる。
 
-ZaruBall.dtsi/ZaruBall_left.overlay/ZaruBall_right.overlayのように.dtsiや.oerlayという拡張子で終わるファイルには物理的なキーボードの設定項目が記述されている。.dtsiファイルにはすべてのキーボード(左右分割の場合、両手分)に共通する設定が格納されており、.overlayでそれぞれのキーボード固有の設定が格納されている。
+configフォルダの中にはキーボードのファームウェアの設定ファイルが含まれている。これらの情報をもとに、画面上にキーボードの配列を再現、どのキーがどのGPIOピンに接続されているかを把握する。
 
-・kscan0ノード：キースイッチのマトリクスに割り当てているマイコン(xiao ble)のピン番号を決定。
+ZaruBall.dtsi/ZaruBall_left.overlay/ZaruBall_right.overlayのように.dtsiや.oerlayという拡張子で終わるファイルには物理的なキーボードの設定項目が記述されている。.dtsiファイルにはすべてのキーボード(左右分割の場合、両手分)に共通する設定が格納されており、.overlayでそれぞれのキーボード固有の設定が格納されている。.dtsiファイルで定義されたノードが.overlayファイルで上書きや追記されることもあるので、.overlayファイルも必ず読み込むこと。
+
+・chosenノード: 「システム全体で使うデフォルトのハードウェア設定を指定する場所」という意味を持つ。
+このchosenノードにphysical-layoutやkscan, default_transformが定義されいるのでその名前を使用してkscanとphysical-layoutを探す。ただ、chosenノードでphysical-layoutが定められている場合は、physical-layoutノードでkscanやdefault_transformが紐づけられていることがある。もし、chosenノードでphysical-layoutが定められており、他の項目がない場合は、physical-layoutノード内でkscanやdefault_transformが定義されている可能性が高い。
+例:
+/ {
+    chosen {
+        zmk,kscan = &kscan0;
+        zmk,physical-layout = &physical_layout0;
+    };
+};
+
+
+・kscanノード：キースイッチのマトリクスに割り当てているマイコン(xiao ble)のピン番号を決定。
 compatibleではkscan-gpio-matrixが通常マトリクス、kscan-gpio-charlieplexがchrlieplexでマトリクスが構成されている事を意味する。diode-directionでは行からの信号を列で受け取るのか、列からの信号を行で受け取るのかを決定する。　
 
 ・default_transformノード：スイッチがどのマイコンのピンと接続されているかを定義。RC(1,2)はkscan0にてrow-gpiosで2番目に設定されたgpioとcolumn-gpiosの3番目に設定されたgpioに接続されていることが分かる。col-offsetやrow-offsetでは分割キーボードにおいて、それぞれ別々.overlayファイルにてcol-gpiosを設定した時に参照する行列番号が左右キーボードで一致しないようにするためのオフセット数を定める。
 
-・physical_layout0ノード：各スイッチの物理的な配置を決定。順番は、default_transformノードのスイッチの順番と合致している。 <&key_physical_attrs 100 100  982  480  (-1500)  982   480>はこのキーが幅1u、高さ1u、左上を原点とした時のxy座標が(9.82u, 4.80u)、回転角度が-15度、回転の中心となる座標が(9.82u, 4.80u)であることを示している。
+・physical_layoutノード：各スイッチの物理的な配置を決定。順番は、default_transformノードのスイッチの順番と合致している。 <&key_physical_attrs 100 100  982  480  (-1500)  982   480>はこのキーが幅1u、高さ1u、左上を原点とした時のxy座標が(9.82u, 4.80u)、回転角度が-15度、回転の中心となる座標が(9.82u, 4.80u)であることを示している。
 
 
 追加指示
-ファームウェアのフォルダを選択し、そのフォルダ内を解析して配列を再現したり不具合箇所を推測する。これによって他のキーボードでも同じような不具合を防ぐことができるようにしたい。
 ――――――――――――――――――――――――――――――――――――
-chosenノードがあるとき、そこにphysical-layoutが定義されていることがある。この時は定義されたノードをphysical layoutとして使用すること。
-/ {
-    chosen {
-        zmk,physical-layout = &lalapad_physical_layout;
-    };
+charlieplexの場合はkscanノードにはrow-gpiosとcolumn-gpiosではなく、gpiosとしてgpioピンが定義されている。
+また、interrupt-gpiosが定められている場合があるが、このgpioピンが接続されていないとすべてのキーが入力されない症状となる。
+
+例:
+&default_transform {
+    col-offset = <12>;
+    row-offset = <12>;
+};　
+
+&kscan0 {
+    gpios
+        = <&xiao_d 0 GPIO_ACTIVE_HIGH>//M1
+        , <&xiao_d 1 GPIO_ACTIVE_HIGH>//M2
+        , <&xiao_d 2 GPIO_ACTIVE_HIGH>//M3
+        , <&xiao_d 3 GPIO_ACTIVE_HIGH>//M4
+        , <&xiao_d 4 GPIO_ACTIVE_HIGH>//M5
+        , <&xiao_d 5 GPIO_ACTIVE_HIGH>//M6
+        ;
+    interrupt-gpios = <&xiao_d 6 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;//IGPIO
+};
+
+
+ピンの名前を基板のシルクに記載されているピン番号と一致するように表示したい。ファームウェアで設定するピン番号とシルクのピン番号を示したデータベースを作成し、それをもとにシルクに記載されている番号を表示するように変更。
+
+加えて、不具合があると想定されるダイオードのシルク番号も併せて表示したい。通常、一つのキーにつき一つのダイオードを入れる。そこでスイッチごとに対応するダイオードの番号を示したデータベースを作成し、それをもとにダイオードのシルク番号を表示するように変更する。
+
+charlieplexの場合、ダイオードの数はさらに増える。一つのキーに対応するダイオードのほかにも複数のダイオードが存在する。
+Interrupt-gpiosに接続する前に配置されるダイオードやgpioピンでキー入力を検知する前にもダイオードが必要となる。これらのデータベースも作成し、それをもとにダイオードのシルク番号を表示するように変更する。
+
+また、どのような場合にこれらのダイオードやピンに不具合があると判断するかを示したフローチャートを描いてほしい。それをもとに私が正しいか判断し、適宜修正したい。
+
+
+分割キーボードの場合、左右のキーボードでそれぞれ共通のピンを使用している場合がある。左右で同じピンを使用していた場合、シルク名は異なっていることもあるためそれぞれ別にデータベースに登録したい。
+具体的には&xiao_d 0ピンを左手側ではM0として、右手ではM1として使用していることがある。また、同じピン番号であっても区別がつくように右や左などの区別を付けたい。
+build.yamlファイルにキーボードの名称が記載されている。shieldの項目をそれぞれのキーボードの名称として使用すること。(settings_resetはリセット用のファームウェアなので無視する)
+また、.overlayファイルの名称がshieldの項目と一致するとそのキーボード専用の設定ファイルとなっていることを前提にシステムを構築すること。
+
+例:
+include:
+  - board: seeeduino_xiao_ble
+    shield: mona2_r rgbled_adapter
+    snippet: studio-rpc-usb-uart
+  - board: seeeduino_xiao_ble
+    shield: mona2_l rgbled_adapter
+  - board: seeeduino_xiao_ble
+    shield: settings_reset
+
+分割で通常マトリクスでは、左右で行もしくは列のgpioが一致している場合、片方のキーボードのすべての行もしくは列に関係するキーが不能でも、もう片方のキーが入力されているためにそれぞれキーが個別に不具合があると判定されてしまう。
