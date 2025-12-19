@@ -434,6 +434,10 @@ footer {
     font-weight: 700;
 }
 
+.guide-content section:first-child h2 {
+    margin-top: 0;
+}
+
 .guide-content h3 {
     color: #0f172a;
     margin-top: 2rem;
