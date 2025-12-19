@@ -4,32 +4,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZMK Keyboard Matrix Diagnoser</title>
+    <title>ZMK Key Matrix Diagnoser</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="app-icon.png" type="image/png">
 </head>
 
 <body>
     <div class="container">
         <header>
-            <h1>ZMK Keyboard Matrix Diagnoser</h1>
+            <img src="app-icon.png" alt="App Icon" class="app-icon">
+            <h1>ZMK Key Matrix Diagnoser</h1>
             <p class="subtitle">反応しないキーを選択して、故障箇所を特定</p>
         </header>
 
         <main>
             <div class="upload-section">
-                <p id="repoInstruction" class="input-instruction">
+                <p id="repoInstruction" class="input-instruction" style="line-height: 1.7;">
                     GitHub 上の ZMK config リポジトリの URL を入力してください。<br>
                     （例: <code>https://github.com/YourName/zmk-config-YourKeyboard</code>）<br>
-                     <code>build.yaml</code> 、 <code>.dtsi</code> / <code>.overlay</code> ファイルが含まれている必要があります。<br>
-                     Direct, Matrix, Charlieplex Driverに対応しています。
+                    <!-- <code>build.yaml</code> 、 <code>.dtsi</code> / <code>.overlay</code> ファイルが含まれている必要があります。<br> -->
+                    Direct, Matrix, Charlieplex Driverに対応しています。
                 </p>
                 <div class="input-group">
                     <input type="text" id="repoInput"
                         placeholder="GitHub Repository URL" class="repo-input">
-                    <button id="loadBtn" class="btn btn-primary">Load Repository</button>
+                    <button id="loadBtn" class="btn btn-primary">ロード</button>
                     <!-- <button id="loadFolderBtn" class="btn btn-secondary">またはフォルダを選択</button> -->
                 </div>
                 <div id="statusMessage" class="status-message"></div>
@@ -63,20 +65,21 @@
                                 <polyline points="7 10 12 15 17 10"></polyline>
                                 <line x1="12" y1="15" x2="12" y2="3"></line>
                             </svg>
-                            テンプレート
+                            DBテンプレート
                         </button>
                     </div>
                 </div>
 
                 <div id="resultArea" class="result-area hidden">
-                    <h2>診断結果 (Diagnosis Result)</h2>
+                    <h2>診断結果</h2>
                     <div id="resultContent"></div>
                 </div>
             </div>
         </main>
 
         <footer>
-            <p>Based on ZaruBall Firmware Configuration</p>
+            <p>Based on ZaruBall Firmware Configuration<br>
+            © 2025 ZMK Matrix Diagnoser- Developed by zaruSaru</p>
         </footer>
     </div>
     <script src="script.js"></script>

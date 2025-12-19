@@ -687,18 +687,28 @@ function drawKey(key, index, isSelected) {
     }
 
     const issueColor = state.issueMapping.get(index);
+    
+    roundRect(ctx, x, y, w, h, 8);
+
     if (issueColor) {
+        // Highlighted key: Light fill, solid border
+        ctx.save();
+        ctx.globalAlpha = 0.25;
         ctx.fillStyle = issueColor;
-        ctx.strokeStyle = issueColor; // Use same color for stroke to pop
+        ctx.fill();
+        ctx.restore();
+
+        ctx.strokeStyle = issueColor;
+        ctx.lineWidth = 3;
+        ctx.stroke();
     } else {
+        // Normal key
         ctx.fillStyle = isSelected ? themeColors.keySelected : themeColors.keyDefault;
         ctx.strokeStyle = isSelected ? themeColors.keySelectedStroke : themeColors.keyStroke;
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
     }
-    ctx.lineWidth = 2;
-
-    roundRect(ctx, x, y, w, h, 8);
-    ctx.fill();
-    ctx.stroke();
 
     ctx.fillStyle = isSelected ? '#7f1d1d' : '#475569';
     ctx.font = '10px Inter';
