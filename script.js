@@ -114,19 +114,25 @@ async function handleRepoLoad() {
             parsedData.database = await fetcher.fetchDatabase();
             const dlContainer = document.getElementById('dlTemplateContainer');
             const manualSection = document.getElementById('dbManualSection');
+            const guideLinkContainer = document.getElementById('guideLinkContainer');
+
             if (parsedData.database) {
                 console.log("Database loaded successfully.");
                 dlContainer.classList.add('hidden');
                 manualSection.classList.add('hidden');
+                if (guideLinkContainer) guideLinkContainer.classList.add('hidden');
             } else {
                 console.warn("Database not found.");
                 dlContainer.classList.remove('hidden');
                 manualSection.classList.remove('hidden');
+                if (guideLinkContainer) guideLinkContainer.classList.remove('hidden');
             }
         } catch (e) {
             console.warn("Database fetch failed", e);
             document.getElementById('dlTemplateContainer').classList.remove('hidden');
             document.getElementById('dbManualSection').classList.remove('hidden');
+            const guideLinkContainer = document.getElementById('guideLinkContainer');
+            if (guideLinkContainer) guideLinkContainer.classList.remove('hidden');
         }
 
         // Init UI

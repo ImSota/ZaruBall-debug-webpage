@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>データベース作成ガイド - ZMK Key Matrix Diagnoser</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="app-icon.png" type="image/png">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>データベース作成ガイド</h1>
+            <p class="subtitle">ZMK Key Matrix Diagnoser 用データベースの作成方法</p>
+            <a href="index.html" class="back-link">← ツールに戻る</a>
+        </header>
+
+        <main class="guide-content">
+            <section>
+                <h2>データベース機能とは</h2>
+                <p>
+                    このツールでは、キーボードの回路情報（行列やGPIOピン）と、実際の基板上の部品名（シルク印字）を紐付ける「データベース」を読み込むことができます。<br>
+                    データベースを登録すると、診断結果に具体的なスイッチ番号（例: <code>SW1</code>）やダイオード番号（例: <code>D1</code>）が表示されるようになり、修理箇所の特定が容易になります。
+                </p>
+
+                <div class="comparison-container">
+                    <div class="comparison-item">
+                        <div class="img-wrapper">
+                            <img src="wo_database.png" alt="データベース無しでの診断結果">
+                        </div>
+                        <p class="caption">データベース無し<br><span class="sub-caption">抽象的な行/列番号のみ表示</span></p>
+                    </div>
+                    <div class="comparison-item">
+                        <div class="img-wrapper">
+                            <img src="w_database.png" alt="データベース有りでの診断結果">
+                        </div>
+                        <p class="caption">データベース有り<br><span class="sub-caption">具体的な部品名 (SW, D) を表示</span></p>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2>作成と利用の手順</h2>
+                <ol class="step-list">
+                    <li>
+                        <strong>テンプレートのダウンロード</strong>
+                        <p>
+                            ツールでリポジトリをロードした後、画面左側の <button class="btn btn-db-template" style="display: inline-flex; padding: 0.25rem 0.75rem; font-size: 0.85rem; pointer-events: none;"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; stroke-width: 2.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> DBテンプレート</button> ボタンをクリックして、<code>matrix-diagnoser-database.json</code> をダウンロードします。<br>
+                            このファイルには、解析された回路情報がすべて含まれています。
+                        </p>
+                    </li>
+                    <li>
+                        <strong>JSONファイルの編集</strong>
+                        <p>
+                            ダウンロードしたファイルをテキストエディタで開き、各ピンやキーに対応する部品名（シルク）を記入します。（詳しくは後述の「JSON仕様」を参照）
+                        </p>
+                    </li>
+                    <li>
+                        <strong>アップロード</strong>
+                        <p>
+                            ツール画面の<button class="btn btn-secondary" style="display: inline-flex; padding: 0.25rem 0.75rem; font-size: 0.85rem; pointer-events: none; border-color: var(--border-color); color: var(--text-secondary);"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; stroke-width: 2.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> DB読込</button>から、編集した <code>matrix-diagnoser-database.json</code> を読み込ませます。
+                        </p>
+                        <p style="margin-top: 0.5rem; font-size: 0.95rem; color: #475569;">
+                            <strong>便利機能:</strong> このファイルを ZMK config リポジトリのルート（または <code>config/</code> ディレクトリ）に配置してプッシュしておくと、リポジトリのロード時に自動的に読み込まれます。
+                        </p>
+                    </li>
+                </ol>
+            </section>
+
+            <section>
+                <h2>JSON仕様</h2>
+                
+                <h3>1. pins リスト</h3>
+                <p>GPIOピンごとの情報を定義します。</p>
+                <pre><code class="language-json">"pins": {
+  "Left_xiao_d 0": {
+    "silk": "M1",             // マイコンピンのシルク印字
+    "line_diode": "D11",       // このGPIOピンに関連するラインダイオード（charlieplexのみ）
+    "interrupt_diode": "DI1"  // 割り込み用ダイオード（charlieplexのみ）
+  },
+  ...
+}</code></pre>
+
+                <h3>2. keys リスト</h3>
+                <p>キースイッチごとの情報を定義します。</p>
+                <pre><code class="language-json">"keys": [
+  {
+    "matrix": [0, 1],         // 行・列番号（変更不要）
+    "silk_sw": "SW1",         // スイッチのシルク印字
+    "silk_d": "D1"            // そのスイッチに対応するダイオードのシルク印字
+  },
+  ...
+]</code></pre>
+            </section>
+        </main>
+
+        <footer>
+            <p>© 2025 ZMK Key Matrix Diagnoser - Developed by zaruSaru</p>
+        </footer>
+    </div>
+</body>
+</html>
