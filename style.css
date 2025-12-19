@@ -25,7 +25,7 @@
 }
 
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: sans-serif;
     background-color: var(--bg-color);
     color: var(--text-primary);
     line-height: 1.5;
@@ -143,6 +143,15 @@ main {
 
 .status-message.success {
     color: #059669;
+}
+
+.input-instruction code {
+    background-color: #f1f5f9;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    color: var(--accent-color);
+    font-family: inherit;
+    font-weight: 500;
 }
 
 #debugInterface {

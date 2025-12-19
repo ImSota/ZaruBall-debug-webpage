@@ -20,9 +20,15 @@
 
         <main>
             <div class="upload-section">
+                <p id="repoInstruction" class="input-instruction">
+                    GitHub 上の ZMK config リポジトリの URL を入力してください。<br>
+                    （例: <code>https://github.com/YourName/zmk-config-YourKeyboard</code>）<br>
+                     <code>build.yaml</code> 、 <code>.dtsi</code> / <code>.overlay</code> ファイルが含まれている必要があります。<br>
+                     Direct, Matrix, Charlieplex Driverに対応しています。
+                </p>
                 <div class="input-group">
                     <input type="text" id="repoInput"
-                        placeholder="GitHub Repository URL (e.g. https://github.com/ImSota/zmk-config-ZaruBall)" class="repo-input">
+                        placeholder="GitHub Repository URL" class="repo-input">
                     <button id="loadBtn" class="btn btn-primary">Load Repository</button>
                     <!-- <button id="loadFolderBtn" class="btn btn-secondary">またはフォルダを選択</button> -->
                 </div>

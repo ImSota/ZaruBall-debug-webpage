@@ -132,6 +132,7 @@ async function handleRepoLoad() {
         // Init UI
         setStatus("解析完了", "success");
         document.getElementById('debugInterface').classList.remove('hidden');
+        document.getElementById('repoInstruction').classList.add('hidden'); // Hide instructions
         initCanvas();
 
     } catch (err) {
