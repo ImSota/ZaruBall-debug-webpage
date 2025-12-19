@@ -17,8 +17,20 @@ let parsedData = {
 };
 
 const state = {
-    selectedIndices: new Set()
+    selectedIndices: new Set(),
+    issueMapping: new Map() // index -> color
 };
+
+const ISSUE_COLORS = [
+    '#3b82f6', // Blue
+    '#f59e0b', // Amber
+    '#10b981', // Emerald
+    '#8b5cf6', // Violet
+    '#f43f5e', // Rose
+    '#06b6d4', // Cyan
+    '#6366f1', // Indigo
+    '#84cc16'  // Lime
+];
 
 let themeColors = {};
 
@@ -49,6 +61,11 @@ document.addEventListener('DOMContentLoaded', () => {
     resetBtn.addEventListener('click', resetSelection);
     diagnoseBtn.addEventListener('click', diagnose);
     dlTemplateBtn.addEventListener('click', downloadTemplate);
+
+    const dbFileInput = document.getElementById('dbFileInput');
+    if (dbFileInput) {
+        dbFileInput.addEventListener('change', handleManualDatabaseUpload);
+    }
 
     // Add Enter key support for input
     repoInput.addEventListener('keypress', (e) => {
@@ -91,20 +108,25 @@ async function handleRepoLoad() {
 
         // Init UI
         setStatus("解析完了", "success");
-        // Try to fetch database.json
+        // Try to fetch matrix-diagnoser-database.json
         setStatus("データベース検索中...", "loading");
         try {
             parsedData.database = await fetcher.fetchDatabase();
+            const dlContainer = document.getElementById('dlTemplateContainer');
+            const manualSection = document.getElementById('dbManualSection');
             if (parsedData.database) {
                 console.log("Database loaded successfully.");
-                document.getElementById('dlTemplateBtn').classList.add('hidden');
+                dlContainer.classList.add('hidden');
+                manualSection.classList.add('hidden');
             } else {
                 console.warn("Database not found.");
-                document.getElementById('dlTemplateBtn').classList.remove('hidden');
+                dlContainer.classList.remove('hidden');
+                manualSection.classList.remove('hidden');
             }
         } catch (e) {
             console.warn("Database fetch failed", e);
-            document.getElementById('dlTemplateBtn').classList.remove('hidden');
+            document.getElementById('dlTemplateContainer').classList.remove('hidden');
+            document.getElementById('dbManualSection').classList.remove('hidden');
         }
 
         // Init UI
@@ -240,17 +262,25 @@ class GitHubFetcher {
     }
 
     async fetchDatabase() {
-        // Try fetching database.json from root
-        // If branch is set, use it.
-        const url = `https://raw.githubusercontent.com/${this.repo}/${this.branch || 'main'}/database.json`;
-        try {
-            // We use fetch directly. If 404, it throws or returns !ok
-            const res = await fetch(url);
-            if (res.ok) {
-                return await res.json();
+        // Try fetching matrix-diagnoser-database.json from root or config directory
+        const dbName = 'matrix-diagnoser-database.json';
+        const paths = [
+            dbName,
+            `config/${dbName}`,
+            'database.json' // Legacy support
+        ];
+
+        for (const path of paths) {
+            const url = `https://raw.githubusercontent.com/${this.repo}/${this.branch || 'main'}/${path}`;
+            try {
+                const res = await fetch(url);
+                if (res.ok) {
+                    console.log(`Found database at: ${url}`);
+                    return await res.json();
+                }
+            } catch (e) {
+                console.log(`Failed to fetch database at ${url}:`, e);
             }
-        } catch (e) {
-            console.log("database.json check failed:", e);
         }
         return null;
     }
@@ -264,10 +294,12 @@ class ZMKParser {
         this.result = {
             physicalKeys: [], // {x, y, w, h, r, rx, ry}
             matrixMap: [], // {r, c}
-            pinMap: { left: { row: {}, col: {} }, right: { row: {}, col: {} } },
-            matrixTransform: { rows: 0, cols: 0, colOffset: 0, rowOffset: 0 }
+            pinMap: {}, // Dynamically keyed by shield name
+            matrixTransform: { rows: 0, cols: 0, colOffset: 0, rowOffset: 0 },
+            diodeDirection: 'col2row'
         };
         this.rawFiles = {};
+        this.shields = []; // List of shield names
     }
 
     getResult() {
@@ -296,35 +328,45 @@ class ZMKParser {
     }
 
     findAndParseBuildConfig() {
-        this.shields = { left: null, right: null };
-        // Look for build.yaml
+        this.shields = [];
         for (const [name, content] of Object.entries(this.rawFiles)) {
             if (name.endsWith('build.yaml')) {
                 console.log(`Found build.yaml: ${name}`);
-                // Simple parsing for "shield: <name>"
-                // Example: shield: mona2_r rgbled_adapter
+                // Match lines like "shield: mona2_r" or "shield: [corne_left, rpi_pico]"
                 const lines = content.split('\n');
-                for (const line of lines) {
-                    const match = line.match(/shield:\s*([^\s]+)/); // Take first token after shield:
+                lines.forEach(line => {
+                    const match = line.match(/shield:\s*(.*)/);
                     if (match) {
-                        const shieldName = match[1];
-                        if (shieldName === 'settings_reset') continue;
-
-                        if (shieldName.endsWith('_l')) {
-                            this.shields.left = shieldName;
-                            console.log(`Identified Left Shield: ${shieldName}`);
-                        } else if (shieldName.endsWith('_r')) {
-                            this.shields.right = shieldName;
-                            console.log(`Identified Right Shield: ${shieldName}`);
-                        }
+                        let value = match[1].trim();
+                        // Remove potential trailing comma or brackets if it's a multi-line list start
+                        // but let's assume standard single-line or bracketed line for now
+                        value = value.replace(/[\[\]]/g, ''); // Remove [ and ]
+                        
+                        const entries = value.split(',');
+                        entries.forEach(entry => {
+                            // Clean up quotes and take the first part
+                            let shieldEntry = entry.trim().replace(/["']/g, ''); // Remove " and '
+                            const baseShield = shieldEntry.split(/\s+/)[0];
+                            
+                            if (baseShield && baseShield !== 'settings_reset' && !this.shields.includes(baseShield)) {
+                                this.shields.push(baseShield);
+                                if (!this.result.pinMap[baseShield]) {
+                                    this.result.pinMap[baseShield] = { row: {}, col: {} };
+                                }
+                                console.log(`Identified Shield: ${baseShield}`);
+                            }
+                        });
                     }
-                }
+                });
             }
         }
     }
 
     stripComments(text) {
-        return text.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        // Remove C-style // and /* */, and Hash-style # comments
+        return text.replace(/\/\/.*$/gm, '')
+                   .replace(/\/\*[\s\S]*?\*\//g, '')
+                   .replace(/#.*$/gm, '');
     }
 
     findAndParsePhysicalLayout() {
@@ -420,14 +462,22 @@ class ZMKParser {
     findAndParseMatrixTransform() {
         const rcRegex = /RC\(\s*(\d+)\s*,\s*(\d+)\s*\)/g;
         const colOffsetRegex = /col-offset\s*=\s*<(\d+)>/;
+        const rowOffsetRegex = /row-offset\s*=\s*<(\d+)>/;
 
         for (const [filename, content] of Object.entries(this.rawFiles)) {
+            // Identify side/shield based on filename
+            let shieldName = 'common';
+            for (const s of this.shields) {
+                if (filename.includes(s)) {
+                    shieldName = s;
+                    break;
+                }
+            }
+
             // Transform Map
             if (content.includes('map = <')) {
                 const mapBlockMatch = /map\s*=\s*<([\s\S]*?)>;/.exec(content);
                 if (mapBlockMatch) {
-                    // Check if this map is the one used? Ideally check chosen zmk,matrix-transform
-                    // But usually there's only one main map in use or they are similar
                     let match;
                     const map = [];
                     while ((match = rcRegex.exec(mapBlockMatch[1])) !== null) {
@@ -446,32 +496,20 @@ class ZMKParser {
             // Col Offset
             if (content.includes('col-offset')) {
                 const match = colOffsetRegex.exec(content);
-                if (match) {
-                    // Heuristic or precise check for right side overlay to get offset
-                    let isRight = filename.includes('right');
-                    if (this.shields && this.shields.right && filename.includes(this.shields.right)) {
-                        isRight = true;
-                    }
-
-                    if (isRight) {
-                        this.result.matrixTransform.colOffset = parseInt(match[1]);
-                        console.log(`Found Col Offset ${this.result.matrixTransform.colOffset} in ${filename}`);
-                    }
+                if (match && shieldName !== 'common') {
+                    if (!this.result.pinMap[shieldName]) this.result.pinMap[shieldName] = { row: {}, col: {} };
+                    this.result.pinMap[shieldName].colOffset = parseInt(match[1]);
+                    console.log(`Found Col Offset ${this.result.pinMap[shieldName].colOffset} for ${shieldName} in ${filename}`);
                 }
             }
 
             // Row Offset
             if (content.includes('row-offset')) {
-                const match = /row-offset\s*=\s*<(\d+)>/.exec(content);
-                if (match) {
-                    let isRight = filename.includes('right');
-                    if (this.shields && this.shields.right && filename.includes(this.shields.right)) {
-                        isRight = true;
-                    }
-                    if (isRight) {
-                        this.result.matrixTransform.rowOffset = parseInt(match[1]);
-                        console.log(`Found Row Offset ${this.result.matrixTransform.rowOffset} in ${filename}`);
-                    }
+                const match = rowOffsetRegex.exec(content);
+                if (match && shieldName !== 'common') {
+                    if (!this.result.pinMap[shieldName]) this.result.pinMap[shieldName] = { row: {}, col: {} };
+                    this.result.pinMap[shieldName].rowOffset = parseInt(match[1]);
+                    console.log(`Found Row Offset ${this.result.pinMap[shieldName].rowOffset} for ${shieldName} in ${filename}`);
                 }
             }
         }
@@ -479,19 +517,27 @@ class ZMKParser {
 
     findAndParsePinConfig() {
         for (const [filename, content] of Object.entries(this.rawFiles)) {
-            // Check for kscan node
-            // Standard or Charlieplex
-            // We search for nodes that have row-gpios/col-gpios OR gpios/interrupt-gpios
+            // Parse diode-direction
+            const diodeMatch = /diode-direction\s*=\s*"([^"]+)"/.exec(content);
+            if (diodeMatch) {
+                this.result.diodeDirection = diodeMatch[1];
+                console.log(`Found diode-direction: ${this.result.diodeDirection} in ${filename}`);
+            }
 
-            // Heuristic to decide side
-            let side = 'left';
-            if (filename.includes('right')) side = 'right';
+            // Identify side based on shields from build.yaml
+            let side = 'common';
+            for (const shield of this.shields) {
+                if (filename.includes(shield)) {
+                    side = shield;
+                    break;
+                }
+            }
 
-            // Precise detection using shields from build.yaml
-            if (this.shields && this.shields.left && filename.includes(this.shields.left)) {
-                side = 'left';
-            } else if (this.shields && this.shields.right && filename.includes(this.shields.right)) {
-                side = 'right';
+            const targetSides = side === 'common' ? this.shields : [side];
+            if (targetSides.length === 0 && side === 'common') {
+                // Fallback if no build.yaml or shields found yet
+                // (though build.yaml should be parsed first)
+                continue; 
             }
 
             // Standard Matrix
@@ -499,35 +545,61 @@ class ZMKParser {
                 const rowGpios = this.extractGpioList(content, 'row-gpios');
                 const colGpios = this.extractGpioList(content, 'col-gpios');
 
-                if (Object.keys(rowGpios).length > 0) this.result.pinMap[side].row = rowGpios;
-                if (Object.keys(colGpios).length > 0) this.result.pinMap[side].col = colGpios;
-                console.log(`Parsed Standard Pins for ${side} (${filename})`);
+                targetSides.forEach(s => {
+                    if (!this.result.pinMap[s]) this.result.pinMap[s] = { row: {}, col: {} };
+                    if (Object.keys(rowGpios).length > 0) Object.assign(this.result.pinMap[s].row, rowGpios);
+                    if (Object.keys(colGpios).length > 0) Object.assign(this.result.pinMap[s].col, colGpios);
+                });
+                console.log(`Parsed Standard Pins for ${side} (applied to ${targetSides.join(', ')})`);
             }
 
             // Charlieplex
-            // Looks for gpios = <...>; and maybe interrupt-gpios
-            if (content.includes('compatible') && content.includes('zmk,kscan-gpio-charlieplex') || (content.includes('gpios') && !content.includes('row-gpios') && !content.includes('col-gpios'))) {
-                // Parse 'gpios'
+            const hasGpios = /(?:^|[\s;])gpios\s*=/.test(content);
+            const isCharlieMode = (content.includes('compatible') && content.includes('zmk,kscan-gpio-charlieplex')) || 
+                                (hasGpios && !content.includes('row-gpios') && !content.includes('col-gpios'));
+
+            if (isCharlieMode) {
                 const gpios = this.extractGpioList(content, 'gpios');
-                // Parse 'interrupt-gpios' (usually just one)
                 const intGpios = this.extractGpioList(content, 'interrupt-gpios');
 
-                if (Object.keys(gpios).length > 0) {
-                    this.result.pinMap[side].gpios = gpios;
-                    console.log(`Parsed Charlieplex Pins for ${side}:`, gpios);
-                }
-                if (Object.keys(intGpios).length > 0) {
-                    // Just take the first one
-                    this.result.pinMap[side].interrupt = intGpios[0];
-                    console.log(`Parsed Interrupt Pin for ${side}:`, intGpios[0]);
-                }
+                targetSides.forEach(s => {
+                    if (!this.result.pinMap[s]) this.result.pinMap[s] = { row: {}, col: {} };
+                    if (Object.keys(gpios).length > 0) {
+                        if (!this.result.pinMap[s].gpios) this.result.pinMap[s].gpios = {};
+                        Object.assign(this.result.pinMap[s].gpios, gpios);
+                        this.result.diodeDirection = 'col2row'; // Charlieplex is always col2row
+                    }
+                    if (Object.keys(intGpios).length > 0) {
+                        this.result.pinMap[s].interrupt = Object.values(intGpios)[0];
+                    }
+                });
+                console.log(`Parsed Charlieplex/GPIO Pins for ${side} (applied to ${targetSides.join(', ')})`);
+            }
+
+            // Direct GPIO
+            const isDirectMode = (content.includes('compatible') && content.includes('zmk,kscan-gpio-direct')) || 
+                               (content.includes('input-gpios') && !content.includes('row-gpios') && !content.includes('col-gpios'));
+            
+            if (isDirectMode) {
+                const directGpios = this.extractGpioList(content, 'input-gpios');
+                targetSides.forEach(s => {
+                    if (!this.result.pinMap[s]) this.result.pinMap[s] = { row: {}, col: {} };
+                    if (Object.keys(directGpios).length > 0) {
+                        if (!this.result.pinMap[s].direct) this.result.pinMap[s].direct = {};
+                        Object.assign(this.result.pinMap[s].direct, directGpios);
+                        this.result.diodeDirection = 'row2col'; // Direct is often row2col (Row 0 is GND)
+                    }
+                });
+                console.log(`Parsed Direct Pins for ${side} (applied to ${targetSides.join(', ')})`);
             }
         }
     }
 
     extractGpioList(content, propName) {
         // Regex to match "propName = < ... >;" (multiline)
-        const regex = new RegExp(`${propName}\\s*=\\s*<([\\s\\S]*?)>;`);
+        // Ensure the character before propName is not a hyphen or word char.
+        // JS doesn't always support (?<!), so use (^|[\s;]) prefix.
+        const regex = new RegExp(`(?:^|[\\s;])${propName}\\s*=[\\s\\S]*?<([\\s\\S]*?);`);
         const match = regex.exec(content);
         if (!match) return {};
 
@@ -613,8 +685,14 @@ function drawKey(key, index, isSelected) {
         ctx.translate(-cx, -cy);
     }
 
-    ctx.fillStyle = isSelected ? themeColors.keySelected : themeColors.keyDefault;
-    ctx.strokeStyle = isSelected ? themeColors.keySelectedStroke : themeColors.keyStroke;
+    const issueColor = state.issueMapping.get(index);
+    if (issueColor) {
+        ctx.fillStyle = issueColor;
+        ctx.strokeStyle = issueColor; // Use same color for stroke to pop
+    } else {
+        ctx.fillStyle = isSelected ? themeColors.keySelected : themeColors.keyDefault;
+        ctx.strokeStyle = isSelected ? themeColors.keySelectedStroke : themeColors.keyStroke;
+    }
     ctx.lineWidth = 2;
 
     roundRect(ctx, x, y, w, h, 8);
@@ -687,6 +765,10 @@ canvas.addEventListener('click', (e) => {
 
     const index = getKeyAt(xx / SCALE, yy / SCALE);
     if (index !== -1) {
+        // If selection changes, previous diagnosis is invalid
+        state.issueMapping.clear();
+        document.getElementById('resultArea').classList.add('hidden');
+
         if (state.selectedIndices.has(index)) {
             state.selectedIndices.delete(index);
         } else {
@@ -698,6 +780,7 @@ canvas.addEventListener('click', (e) => {
 
 function resetSelection() {
     state.selectedIndices.clear();
+    state.issueMapping.clear();
     draw();
     document.getElementById('resultArea').classList.add('hidden');
 }
@@ -717,80 +800,185 @@ function diagnose() {
 
     resultArea.classList.remove('hidden');
 
+    state.issueMapping.clear();
     const failures = analyzeFailures();
     const ul = document.createElement('ul');
     ul.className = 'diagnosis-list';
 
-    for (const f of failures) {
+    failures.forEach((f, fIdx) => {
+        const color = ISSUE_COLORS[fIdx % ISSUE_COLORS.length];
+        
+        // Map keys to this color
+        if (f.indices) {
+            f.indices.forEach(kIdx => {
+                // If a key is part of multiple issues, the first one found wins or we can overwrite
+                if (!state.issueMapping.has(kIdx)) {
+                    state.issueMapping.set(kIdx, color);
+                }
+            });
+        }
+
         const li = document.createElement('li');
+        li.className = `diagnosis-item type-${f.type}`;
+        // Set CSS variable for the theme color
+        li.style.setProperty('--issue-color', color);
+        
         let title = '';
         let desc = '';
 
         if (f.type === 'row') {
             const info = getPinInfo(f.side, f.pin);
-            title = `行 (Row) 全体の不具合 - ${f.side} Side`;
-            desc = `Row Index: ${f.row}<br>Pin: <strong>${info.silk} (${f.pin})</strong>`;
-            if (info.line_diode) desc += `<br>Line Diode: <strong>${info.line_diode}</strong>`;
-            if (info.interrupt_diode) desc += `<br>Int Diode: <strong>${info.interrupt_diode}</strong>`;
-            desc += `<br>このRowの配線またはマイコンのピンを確認してください。`;
+            const silkName = info.silk === f.pin ? `${f.pin}` : info.silk;
+            title = `行 (Row) 全体の不具合 - ${f.side}`;
+            desc = `Pin: <strong>${silkName}</strong>`;
+            desc += `<div class="cause-box">
+                <strong>原因の候補:</strong><br>
+                このマイコンのピン (${silkName}) のハンダ付けを確認してください。
+            </div>`;
         } else if (f.type === 'col') {
             const info = getPinInfo(f.side, f.pin);
-            title = `列 (Column) 全体の不具合 - ${f.side} Side`;
-            desc = `Col Index: ${f.col}<br>Pin: <strong>${info.silk} (${f.pin})</strong>`;
-            if (info.line_diode) desc += `<br>Line Diode: <strong>${info.line_diode}</strong>`;
-            desc += `<br>このColumnの配線またはマイコンのピンを確認してください。`;
+            const silkName = info.silk === f.pin ? `${f.pin}` : info.silk;
+            title = `列 (Column) 全体の不具合 - ${f.side}`;
+            desc = `Pin: <strong>${silkName}</strong>`;
+            desc += `<div class="cause-box">
+                <strong>原因の候補:</strong><br>
+                このマイコンのピン (${silkName}) のハンダ付けを確認してください。
+            </div>`;
         } else if (f.type === 'charlie') {
             const info = getPinInfo(f.side, f.pin);
-            title = `Charlieplex GPIO ピン不具合 - ${f.side} Side`;
-            desc = `Logical Index: ${f.index}<br>Pin: <strong>${info.silk} (${f.pin})</strong>`;
-            if (info.line_diode) desc += `<br>Line Diode: <strong>${info.line_diode}</strong>`;
-            if (info.interrupt_diode) desc += `<br>Int Diode: <strong>${info.interrupt_diode}</strong>`;
-            desc += `<br>このピンに関連する配線を確認してください。<br>(Row/Colとして複数のキーに関与しています)`;
+            const silkName = info.silk === f.pin ? `${f.pin}` : info.silk;
+            const isInputFail = f.roleFail === 'in';
+            const isOutputFail = f.roleFail === 'out';
+            const isBothFail = f.roleFail === 'both';
+            
+            title = `Charlieplex GPIO ピン不具合 - ${f.side}`;
+            desc = `Pin: <strong>${silkName}</strong>`;
+            
+            if (isInputFail) {
+                desc += `<br>状態: <strong>信号受信用 (Input) としての動作不良</strong>`;
+                let diodeInfo = '';
+                if (info.line_diode) {
+                    diodeInfo += `Line Diode: <strong>${info.line_diode}</strong><br>`;
+                } else {
+                    diodeInfo += `<strong>(関連する Line Diode)</strong><br>`;
+                }
+                if (info.interrupt_diode) {
+                    diodeInfo += `Interrupt Diode: <strong>${info.interrupt_diode}</strong><br>`;
+                } else { // Heuristic: Charlieplex pins usually have Int Diodes
+                    diodeInfo += `<strong>(関連する Interrupt Diode)</strong><br>`;
+                }
+                
+                desc += `<div class="cause-box">
+                    <strong>原因の候補:</strong><br>
+                    ${diodeInfo}
+                    マイコンピン: <strong>${silkName}</strong><br>
+                    いずれかのハンダ不良が考えられます。
+                </div>`;
+            } else if (isOutputFail) {
+                desc += `<br>状態: <strong>信号送信用 (Output) としての動作不良</strong>`;
+                desc += `<div class="cause-box">
+                    <strong>原因の候補:</strong><br>
+                    マイコンピン: <strong>${silkName}</strong> のハンダ不良が考えられます。<br>
+                    (ダイオード故障では通常、送信側は影響を受けません)
+                </div>`;
+            } else if (isBothFail) {
+                desc += `<br>状態: <strong>送受信（双方向）の動作不良</strong>`;
+                desc += `<div class="cause-box">
+                    <strong>原因の候補:</strong><br>
+                    マイコンピン: <strong>${silkName}</strong> のハンダ不良が最も疑われます。
+                </div>`;
+            }
+            
+            desc += `<br>このピンに関連する配線全体（複数のRow/Col）を確認してください。`;
+        } else if (f.type === 'direct') {
+            const info = getPinInfo(f.side, f.pin);
+            const m = parsedData.matrixMap[f.indices[0]]; // Assuming direct failure is for a single key
+            const silkName = getKeyInfo(m.r, m.c)?.silk_sw || `SW (RC:${m.r},${m.c})`;
+            title = "Direct GPIO 故障 - " + f.side;
+            desc = `スイッチ <strong>${silkName}</strong> が反応していません。`;
+            desc += `<br>このキーは GPIO ピン <strong>${info.silk}</strong> に直接接続されています。`;
+            desc += `<div class="cause-box">
+                <strong>原因の候補:</strong><br>
+                1. マイコンピン <strong>${info.silk}</strong> のハンダ不良<br>
+                2. スイッチ <strong>${silkName}</strong> 本体の故障またはハンダ不良<br>
+                3. スイッチソケットの浮き・ハンダ不良
+            </div>`;
+            desc += `<br>※この構成ではダイオードを使用しないため、スイッチ周りとマイコンピンの直通確認を行ってください。`;
+        } else if (f.type === 'direct_gnd') {
+            title = "共通 GND 不良の疑い - " + f.side;
+            const count = f.indices.length;
+            desc = `このシールドのほぼ全てのキー（${count}個）が反応していません。`;
+            desc += `<br>Direct GPIO 方式では、全スイッチが共通の GND ピンを共有しています。`;
+            desc += `<div class="cause-box">
+                <strong>原因の候補:</strong><br>
+                1. <strong>共通 GND ピン</strong>（マイコンまたは基板側）のハンダ不良<br>
+                2. 基板上の GND パターンの断線<br>
+                3. 電源周りの不備
+            </div>`;
+            desc += `<br>個別ピンの確認の前に、まずは GND ピンが確実にハンダ付けされているか確認してください。`;
         } else if (f.type === 'interrupt') {
             const info = getPinInfo(f.side, f.pin);
-            title = `割り込み (Interrupt) GPIO 不具合 - ${f.side} Side`;
-            desc = `Pin: <strong>${info.silk} (${f.pin})</strong>`;
-            if (info.line_diode) desc += `<br>Line Diode: <strong>${info.line_diode}</strong>`; // Unlikely for interrupt pin but consistent
-            desc += `<br>このピンが接続されていないと、全てのキー入力が反応しません。<br>半田付けや結線を確認してください。`;
+            const silkName = info.silk === f.pin ? `${f.pin}` : info.silk;
+            title = `割り込み (Interrupt) GPIO 不具合 - ${f.side}`;
+            desc = `Pin: <strong>${silkName}</strong>`;
+            desc += `<div class="cause-box">
+                <strong>対策:</strong><br>
+                このピンが浮いている、または導通していないと、当該サイドの全てのキー入力が反応しません。
+                ハンダ付けを再確認してください。
+            </div>`;
         } else if (f.type === 'single') {
-            // Single key failure
-            // Look up in database.keys
-            // We need to match f.row, f.col (matrix coords)
-            // Or f.index (matrixMap index) - analyzeFailures should provide matrix coords
             const matrixR = f.r;
             const matrixC = f.c;
             const keyInfo = getKeyInfo(matrixR, matrixC);
 
-            title = `個別キーの不具合 - ${f.side} Side`;
+            title = `個別キーの不具合 - ${f.side}`;
             if (keyInfo) {
-                desc = `Switch: <strong>${keyInfo.silk_sw}</strong>`;
-                if (keyInfo.silk_d) desc += `<br>Diode: <strong>${keyInfo.silk_d}</strong>`;
-                desc += `<br>Matrix: ${matrixR}, ${matrixC}`;
+                desc = `Matrix: ${matrixR}, ${matrixC}`;
+                desc += `<div class="cause-box">
+                    <strong>確認部品:</strong><br>
+                    Switch: <strong>${keyInfo.silk_sw}</strong><br>
+                    Diode: <strong>${keyInfo.silk_d || '(関連するダイオード)'}</strong><br>
+                    該当するスイッチソケットおよびダイオードのハンダ付けを確認してください。
+                </div>`;
             } else {
-                desc = `Matrix: ${matrixR}, ${matrixC}<br>個別の接触不良の可能性`;
+                desc = `Matrix: ${matrixR}, ${matrixC}`;
+                desc += `<div class="cause-box">
+                    <strong>確認内容:</strong><br>
+                    個別の接触不良が考えられます。<br>
+                    対象のスイッチと対応するスイッチソケット、ダイオードのハンダ付けを確認してください。
+                </div>`;
             }
-            desc += `<br>ソケット、スイッチ、ダイオードを確認してください。`;
         }
 
         li.innerHTML = `<strong>${title}</strong><p>${desc}</p>`;
         ul.appendChild(li);
-    }
+    });
 
-
+    initCanvas(); // Redraw with colors
     resultContent.appendChild(ul);
 }
 
 
 
 function getPinInfo(side, rawPinName) {
-    const key = `${side === 'left' ? 'Left' : 'Right'}_${rawPinName}`;
-    if (parsedData.database && parsedData.database.pins && parsedData.database.pins[key]) {
-        return parsedData.database.pins[key];
+    // 1. Try shield-specific key (e.g. "corne_left_10")
+    const specificKey = `${side}_${rawPinName}`;
+    if (parsedData.database && parsedData.database.pins && parsedData.database.pins[specificKey]) {
+        return parsedData.database.pins[specificKey];
     }
-    // Fallback or raw
+    
+    // 2. Try legacy Left/Right prefix for compatibility
+    const isLeft = side.toLowerCase().includes('left') || side === 'left';
+    const legacyKey = `${isLeft ? 'Left' : 'Right'}_${rawPinName}`;
+    if (parsedData.database && parsedData.database.pins && parsedData.database.pins[legacyKey]) {
+        return parsedData.database.pins[legacyKey];
+    }
+
+    // 3. Try raw pin name
     if (parsedData.database && parsedData.database.pins && parsedData.database.pins[rawPinName]) {
         return parsedData.database.pins[rawPinName];
     }
+    
     return { silk: rawPinName, line_diode: null, interrupt_diode: null };
 }
 
@@ -811,40 +999,87 @@ function generateDatabaseTemplate() {
     };
 
     // 1. Populate Pins from pinMap
-    // Iterate both sides
-    ['left', 'right'].forEach(side => {
-        const pm = parsedData.pinMap[side];
+    // Iterate all effectively parsed shields
+    Object.keys(parsedData.pinMap).forEach(shieldName => {
+        const pm = parsedData.pinMap[shieldName];
         if (!pm) return;
 
-        // Standard
-        if (pm.row) Object.values(pm.row).forEach(p => db.pins[`${side === 'left' ? 'Left' : 'Right'}_${p}`] = { silk: "M_?", line_diode: "D_?", interrupt_diode: "" });
-        if (pm.col) Object.values(pm.col).forEach(p => db.pins[`${side === 'left' ? 'Left' : 'Right'}_${p}`] = { silk: "M_?", line_diode: "D_?", interrupt_diode: "" });
+        // Key helper
+        const getPinKey = (p) => `${shieldName}_${p}`;
+
+        // Standard Row/Col
+        if (pm.row) {
+            Object.values(pm.row).forEach(p => {
+                const key = getPinKey(p);
+                if (!db.pins[key]) db.pins[key] = { silk: "", line_diode: "", interrupt_diode: "" };
+            });
+        }
+        if (pm.col) {
+            Object.values(pm.col).forEach(p => {
+                const key = getPinKey(p);
+                if (!db.pins[key]) db.pins[key] = { silk: "", line_diode: "", interrupt_diode: "" };
+            });
+        }
 
         // Charlieplex
-        if (pm.gpios) Object.values(pm.gpios).forEach(p => {
-            const key = `${side === 'left' ? 'Left' : 'Right'}_${p}`;
-            // Avoid overwriting if existing
-            if (!db.pins[key]) db.pins[key] = { silk: "M_?", line_diode: "D_?", interrupt_diode: "DI_?" };
-        });
+        if (pm.gpios) {
+            Object.values(pm.gpios).forEach(p => {
+                const key = getPinKey(p);
+                if (!db.pins[key]) db.pins[key] = { silk: "", line_diode: "", interrupt_diode: "" };
+            });
+        }
+
+        // Direct
+        if (pm.direct) {
+            Object.values(pm.direct).forEach(p => {
+                const key = getPinKey(p);
+                if (!db.pins[key]) db.pins[key] = { silk: "", line_diode: "", interrupt_diode: "" };
+            });
+        }
+
+        // Interrupt
         if (pm.interrupt) {
             const p = pm.interrupt;
-            const key = `${side === 'left' ? 'Left' : 'Right'}_${p}`;
-            if (!db.pins[key]) db.pins[key] = { silk: "IGPIO", description: "Interrupt Pin" };
+            const key = getPinKey(p);
+            if (!db.pins[key]) db.pins[key] = { silk: "", description: "" };
         }
     });
 
     // 2. Populate Keys
-    // Iterate matrixMap
     parsedData.matrixMap.forEach((m, i) => {
         if (!m) return;
         db.keys.push({
             matrix: [m.r, m.c],
-            silk_sw: `SW${i + 1}`,
-            silk_d: `D${i + 1}`
+            silk_sw: "",
+            silk_d: ""
         });
     });
 
     return JSON.stringify(db, null, 2);
+}
+
+async function handleManualDatabaseUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        parsedData.database = json;
+        console.log("Manual database loaded:", json);
+        
+        setStatus("手動データベースを読み込みました", "success");
+        document.getElementById('dlTemplateContainer').classList.add('hidden');
+        document.getElementById('dbManualSection').classList.add('hidden');
+        
+        // Redraw diagnosis if result area is visible
+        if (!document.getElementById('resultArea').classList.contains('hidden')) {
+            diagnose();
+        }
+    } catch (err) {
+        console.error("Manual DB upload failed:", err);
+        setStatus("DBファイルの読み込みに失敗しました。", "error");
+    }
 }
 
 function downloadTemplate() {
@@ -853,7 +1088,7 @@ function downloadTemplate() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'database.json';
+    a.download = 'matrix-diagnoser-database.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -864,195 +1099,282 @@ function downloadTemplate() {
 function analyzeFailures() {
     const selected = Array.from(state.selectedIndices);
     const report = [];
-    const colOffset = parsedData.matrixTransform.colOffset || 0;
-    const rowOffset = parsedData.matrixTransform.rowOffset || 0;
-    const groups = { left: { rows: {}, cols: {} }, right: { rows: {}, cols: {} } };
-    const counts = { left: { rows: {}, cols: {} }, right: { rows: {}, cols: {} } };
+    
+    // 1. Identify valid shields (those with pin definitions)
+    const validShields = Object.keys(parsedData.pinMap).filter(s => {
+        const p = parsedData.pinMap[s];
+        return (p.row && Object.keys(p.row).length > 0) || 
+               (p.col && Object.keys(p.col).length > 0) || 
+               (p.gpios && Object.keys(p.gpios).length > 0) ||
+               (p.direct && Object.keys(p.direct).length > 0);
+    });
 
-    // Charlieplex specific counts
-    // Logical indices map to gpios list.
-    // If gpios array is [P0, P1, P2...], then row 0 means P0, col 0 means P0.
-    // We will count failure usage per logical index.
+    if (validShields.length === 0) return [];
 
-    const charlieCounts = { left: {}, right: {} };
-    const charlieTotals = { left: {}, right: {} };
-    // charlieCounts[side][logicalIndex] = number of selected keys using this index
+    // Helper to determine which shield a key belongs to and its local physical coordinates
+    const getSideAndPhysCoords = (m) => {
+        if (!m) return { side: validShields[0] || 'common', physC: 0, physR: 0 };
+        let bestShield = validShields[0];
+        let maxMatchScore = -1;
+        let physC = m.c;
+        let physR = m.r;
 
-    // Count totals first
-    parsedData.matrixMap.forEach((m, idx) => {
+        validShields.forEach(s => {
+            const offsetC = parsedData.pinMap[s].colOffset || 0;
+            const offsetR = parsedData.pinMap[s].rowOffset || 0;
+            
+            // Check if coordinates are within range (>= offset)
+            if (m.c >= offsetC && m.r >= offsetR) {
+                // The "best match" is the one with the largest offset that still contains the target
+                // This correctly handles split configurations where right side starts at some offset
+                const score = offsetC + offsetR;
+                if (score > maxMatchScore) {
+                    maxMatchScore = score;
+                    bestShield = s;
+                    physC = m.c - offsetC;
+                    physR = m.r - offsetR;
+                }
+            }
+        });
+
+        return { side: bestShield, physC, physR };
+    };
+
+    const groups = {};
+    const counts = {};
+    const charlieCounts = {};
+    const charlieTotals = {};
+    
+    validShields.forEach(s => {
+        groups[s] = { rows: {}, cols: {} };
+        counts[s] = { rows: {}, cols: {} };
+        charlieCounts[s] = { in: {}, out: {} };
+        charlieTotals[s] = { in: {}, out: {} };
+    });
+
+    // 2. Calculate totals for each side/physical coordinate
+    parsedData.matrixMap.forEach((m) => {
         if (!m) return;
+        const { side, physC, physR } = getSideAndPhysCoords(m);
 
-        // Determine side based on offset
-        let side = 'left';
-        let physCol = m.c;
-        let physRow = m.r;
+        if (!counts[side]) return;
 
-        if (colOffset > 0 && m.c >= colOffset) {
-            side = 'right';
-            physCol = m.c - colOffset;
-        } else if (rowOffset > 0 && m.r >= rowOffset) {
-            side = 'right';
-            physRow = m.r - rowOffset;
+        if (!counts[side].rows[physR]) counts[side].rows[physR] = 0;
+        counts[side].rows[physR]++;
+        if (!counts[side].cols[physC]) counts[side].cols[physC] = 0;
+        counts[side].cols[physC]++;
+
+        if (parsedData.pinMap[side].gpios) {
+            charlieTotals[side].in[physR] = (charlieTotals[side].in[physR] || 0) + 1;
+            charlieTotals[side].out[physC] = (charlieTotals[side].out[physC] || 0) + 1;
         }
 
-        // Standard
-        if (!counts[side].rows[physRow]) counts[side].rows[physRow] = 0;
-        counts[side].rows[physRow]++;
-
-        if (!counts[side].cols[physCol]) counts[side].cols[physCol] = 0;
-        counts[side].cols[physCol]++;
-
-        // Charlieplex totals
-        if (parsedData.pinMap[side].gpios) {
-            if (!charlieTotals[side][physRow]) charlieTotals[side][physRow] = 0;
-            charlieTotals[side][physRow]++;
-
-            if (!charlieTotals[side][physCol]) charlieTotals[side][physCol] = 0;
-            charlieTotals[side][physCol]++;
+        // Direct mode totals (each key is unique)
+        if (parsedData.pinMap[side].direct) {
+            // No aggregation needed for direct, but we use the counts/totals structure to track it
         }
     });
 
-    // Group selected
+    // 3. Group selected keys
     selected.forEach(idx => {
         const m = parsedData.matrixMap[idx];
         if (!m) return;
+        const { side, physC, physR } = getSideAndPhysCoords(m);
 
-        let side = 'left';
-        let physCol = m.c;
-        let physRow = m.r;
+        if (!groups[side]) return;
 
-        if (colOffset > 0 && m.c >= colOffset) {
-            side = 'right';
-            physCol = m.c - colOffset;
-        } else if (rowOffset > 0 && m.r >= rowOffset) {
-            side = 'right';
-            physRow = m.r - rowOffset;
-        }
+        if (!groups[side].rows[physR]) groups[side].rows[physR] = [];
+        groups[side].rows[physR].push(idx);
+        if (!groups[side].cols[physC]) groups[side].cols[physC] = [];
+        groups[side].cols[physC].push(idx);
 
-        if (!groups[side].rows[physRow]) groups[side].rows[physRow] = [];
-        groups[side].rows[physRow].push(idx);
-
-        if (!groups[side].cols[physCol]) groups[side].cols[physCol] = [];
-        groups[side].cols[physCol].push(idx);
-
-        // Charlieplex selection
         if (parsedData.pinMap[side].gpios) {
-            if (!charlieCounts[side][physRow]) charlieCounts[side][physRow] = 0;
-            charlieCounts[side][physRow]++;
-
-            if (!charlieCounts[side][physCol]) charlieCounts[side][physCol] = 0;
-            charlieCounts[side][physCol]++;
+            charlieCounts[side].in[physR] = (charlieCounts[side].in[physR] || 0) + 1;
+            charlieCounts[side].out[physC] = (charlieCounts[side].out[physC] || 0) + 1;
         }
     });
 
-    // Analyze
-    ['left', 'right'].forEach(side => {
-        let failuresFound = false;
+    const coveredIndices = new Set();
 
-        // Check for Interrupt GPIO failure (Charlieplex specific)
-        if (parsedData.pinMap[side].interrupt && parsedData.pinMap[side].gpios) {
-            // Heuristic
-            let totalKeysSide = 0;
+    // 4. Analyze each side
+    validShields.forEach(side => {
+        const pMap = parsedData.pinMap[side];
+        if (!pMap) return;
+
+        // --- Interrupt logic ---
+        if (pMap.interrupt) {
             let sideTotal = 0;
-            for (let r in counts[side].rows) sideTotal += counts[side].rows[r];
-
-            let selectedSideCount = 0;
-            // Count selected keys belonging to this side
-            selected.forEach(idx => {
-                const m = parsedData.matrixMap[idx];
+            const sideIndices = [];
+            parsedData.matrixMap.forEach((m, idx) => {
                 if (!m) return;
-                let s = 'left';
-                if (colOffset > 0 && m.c >= colOffset) {
-                    s = 'right';
-                } else if (rowOffset > 0 && m.r >= rowOffset) {
-                    s = 'right';
+                const pos = getSideAndPhysCoords(m);
+                if (pos.side === side) {
+                    sideTotal++;
+                    sideIndices.push(idx);
                 }
-                if (s === side) selectedSideCount++;
             });
 
-            if (sideTotal > 0 && (selectedSideCount / sideTotal) > 0.8) {
-                report.push({
-                    type: 'interrupt',
-                    side: side,
-                    pin: parsedData.pinMap[side].interrupt
+            const selectedOnSide = selected.filter(idx => {
+                const m = parsedData.matrixMap[idx];
+                return m && getSideAndPhysCoords(m).side === side;
+            }).length;
+
+            if (sideTotal > 5 && (selectedOnSide / sideTotal) > 0.8) {
+                report.push({ 
+                    type: 'interrupt', 
+                    side, 
+                    pin: pMap.interrupt,
+                    indices: sideIndices
                 });
-                failuresFound = true;
+                sideIndices.forEach(idx => coveredIndices.add(idx));
             }
         }
 
-        if (parsedData.pinMap[side].gpios) {
-            // Charlieplex Analysis
-            const gpios = parsedData.pinMap[side].gpios;
-            for (const idxStr in charlieCounts[side]) {
-                const idx = parseInt(idxStr);
-                const count = charlieCounts[side][idx];
-                const total = charlieTotals[side][idx];
+        // --- Charlieplex Analysis ---
+        if (pMap.gpios) {
+            const gpios = pMap.gpios;
+            const allIndices = new Set([
+                ...(charlieTotals[side] ? Object.keys(charlieTotals[side].in) : []),
+                ...(charlieTotals[side] ? Object.keys(charlieTotals[side].out) : [])
+            ]);
 
-                if (total > 0 && (count / total) > 0.5) {
-                    const pinName = gpios[idx] || 'Unknown';
-                    report.push({
-                        type: 'charlie',
-                        side: side,
-                        index: idx,
-                        pin: pinName
+            allIndices.forEach(idxStr => {
+                const pIdx = parseInt(idxStr);
+                const inCount = charlieCounts[side].in[pIdx] || 0;
+                const inTotal = charlieTotals[side].in[pIdx] || 0;
+                const outCount = charlieCounts[side].out[pIdx] || 0;
+                const outTotal = charlieTotals[side].out[pIdx] || 0;
+
+                const inFail = inTotal > 0 && (inCount / inTotal) > 0.6;
+                const outFail = outTotal > 0 && (outCount / outTotal) > 0.6;
+
+                if (inFail || outFail) {
+                    let roleFail = 'both';
+                    if (inFail && !outFail) roleFail = 'in';
+                    else if (!inFail && outFail) roleFail = 'out';
+                    
+                    // Collect indices involved
+                    const indices = [];
+                    parsedData.matrixMap.forEach((m, kIdx) => {
+                        if (!m) return;
+                        const pos = getSideAndPhysCoords(m);
+                        if (pos.side === side) {
+                            if (roleFail === 'in' && pos.physR === pIdx) indices.push(kIdx);
+                            else if (roleFail === 'out' && pos.physC === pIdx) indices.push(kIdx);
+                            else if (roleFail === 'both' && (pos.physR === pIdx || pos.physC === pIdx)) indices.push(kIdx);
+                        }
                     });
-                    failuresFound = true;
-                }
-            }
 
+                    const involvedSelected = indices.filter(idx => selected.includes(idx));
+                    report.push({ 
+                        type: 'charlie', 
+                        side, 
+                        index: pIdx, 
+                        pin: gpios[pIdx] || 'Unknown',
+                        roleFail: roleFail,
+                        indices: involvedSelected
+                    });
+                    involvedSelected.forEach(idx => coveredIndices.add(idx));
+                }
+            });
+        } else if (pMap.direct) {
+            // --- Direct GPIO Analysis ---
+            // Count direct keys on this side
+            const directIndices = [];
+            parsedData.matrixMap.forEach((m, idx) => {
+                if (!m) return;
+                const pos = getSideAndPhysCoords(m);
+                if (pos.side === side && pMap.direct[pos.physC] !== undefined) {
+                    directIndices.push(idx);
+                }
+            });
+
+            const selectedDirectOnSide = directIndices.filter(idx => selected.includes(idx));
+            
+            // If many direct keys are failing (e.g. > 80%), it's likely a common GND issue
+            if (directIndices.length > 2 && (selectedDirectOnSide.length / directIndices.length) > 0.8) {
+                report.push({
+                    type: 'direct_gnd',
+                    side,
+                    indices: directIndices
+                });
+                directIndices.forEach(idx => coveredIndices.add(idx));
+            } else {
+                // Otherwise report individual pin failures
+                selectedDirectOnSide.forEach(idx => {
+                    const m = parsedData.matrixMap[idx];
+                    const pos = getSideAndPhysCoords(m);
+                    const pin = pMap.direct[pos.physC] || 'Unknown';
+                    report.push({
+                        type: 'direct',
+                        side,
+                        pin,
+                        index: idx,
+                        indices: [idx]
+                    });
+                    coveredIndices.add(idx);
+                });
+            }
         } else {
-            // Standard Analysis
+            // --- Standard Matrix Analysis ---
             // Rows
-            for (const r in groups[side].rows) {
-                const count = groups[side].rows[r].length;
-                const total = counts[side].rows[r];
-                if (count >= 2 && count / total > 0.5) {
-                    const pinName = parsedData.pinMap[side].row ? parsedData.pinMap[side].row[r] : 'Unknown';
-                    report.push({ type: 'row', side: side, row: r, pin: pinName });
-                    failuresFound = true;
+            if (groups[side] && groups[side].rows) {
+                for (const rStr in groups[side].rows) {
+                    const physR = parseInt(rStr);
+                    const count = groups[side].rows[physR].length;
+                    const total = counts[side].rows[physR];
+                    if (total > 0 && (count / total) > 0.6) {
+                        const pin = pMap.row ? pMap.row[physR] : 'Unknown';
+                        report.push({ 
+                            type: 'row', 
+                            side, 
+                            row: physR, 
+                            pin,
+                            indices: groups[side].rows[physR]
+                        });
+                        groups[side].rows[physR].forEach(idx => coveredIndices.add(idx));
+                    }
                 }
             }
             // Cols
-            for (const c in groups[side].cols) {
-                const count = groups[side].cols[c].length;
-                const total = counts[side].cols[c];
-                if (count >= 2 && count / total > 0.5) {
-                    const pinName = parsedData.pinMap[side].col ? parsedData.pinMap[side].col[c] : 'Unknown';
-                    report.push({ type: 'col', side: side, col: c, pin: pinName });
-                    failuresFound = true;
+            if (groups[side] && groups[side].cols) {
+                for (const cStr in groups[side].cols) {
+                    const physC = parseInt(cStr);
+                    const count = groups[side].cols[physC].length;
+                    const total = counts[side].cols[physC];
+                    if (total > 0 && (count / total) > 0.6) {
+                        const pin = pMap.col ? pMap.col[physC] : 'Unknown';
+                        report.push({ 
+                            type: 'col', 
+                            side, 
+                            col: physC, 
+                            pin,
+                            indices: groups[side].cols[physC]
+                        });
+                        groups[side].cols[physC].forEach(idx => coveredIndices.add(idx));
+                    }
                 }
             }
         }
 
-        // If no group failures found for this side, report single keys
-        if (!failuresFound) {
-            selected.forEach(idx => {
-                const m = parsedData.matrixMap[idx];
-                if (!m) return;
-                let s = 'left';
-                if (colOffset > 0 && m.c >= colOffset) {
-                    s = 'right';
-                } else if (rowOffset > 0 && m.r >= rowOffset) {
-                    s = 'right';
-                }
-
-                // Only add if it belongs to this side (to ensure correct 'side' labeling)
-                // Note: 'selected' contains ALL selected keys. failuresFound is per side.
-                // This logic might be slightly tricky if one side has failures and other doesn't.
-                // Ideally we should track which keys were "explained" by failures.
-                // But for now, if a SIDE has no general failures, we assume all selected keys on that side are single faults.
-
-                if (s === side) {
-                    report.push({
-                        type: 'single',
-                        side: side,
-                        r: m.r,
-                        c: m.c,
-                        index: idx
-                    });
-                }
-            });
-        }
+        // --- Single Key Failures (Always check for uncovered indices) ---
+        selected.forEach(idx => {
+            if (coveredIndices.has(idx)) return; // Already explained by row/col/charlie/interrupt
+            
+            const m = parsedData.matrixMap[idx];
+            if (!m) return;
+            const info = getSideAndPhysCoords(m);
+            if (info.side === side) {
+                report.push({ 
+                    type: 'single', 
+                    side, 
+                    r: m.r, 
+                    c: m.c, 
+                    index: idx,
+                    indices: [idx]
+                });
+            }
+        });
     });
 
     return report;

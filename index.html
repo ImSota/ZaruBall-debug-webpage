@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZaruBall Debugger</title>
+    <title>ZMK Keyboard Matrix Diagnoser</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,7 +14,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>ZMK Debugger</h1>
+            <h1>ZMK Keyboard Matrix Diagnoser</h1>
             <p class="subtitle">反応しないキーを選択して、故障箇所を特定</p>
         </header>
 
@@ -22,7 +22,7 @@
             <div class="upload-section">
                 <div class="input-group">
                     <input type="text" id="repoInput"
-                        placeholder="GitHub Repository (e.g. sota-h/ZaruBall-firmware-private)" class="repo-input">
+                        placeholder="GitHub Repository URL (e.g. https://github.com/ImSota/zmk-config-ZaruBall)" class="repo-input">
                     <button id="loadBtn" class="btn btn-primary">Load Repository</button>
                     <!-- <button id="loadFolderBtn" class="btn btn-secondary">またはフォルダを選択</button> -->
                 </div>
@@ -36,10 +36,30 @@
 
                 <div class="controls">
                     <button id="resetBtn" class="btn btn-secondary">リセット</button>
-                    <button id="diagnoseBtn" class="btn btn-primary">診断する (Diagnose)</button>
-                    <button id="dlTemplateBtn" class="btn btn-secondary hidden"
-                        style="background-color: #f0fdf4; color: #15803d; border-color: #86efac;">DBテンプレート (DL
-                        Template)</button>
+                    <button id="diagnoseBtn" class="btn btn-primary">診断</button>
+                    
+                    <div id="dbManualSection" class="db-manual-section hidden">
+                        <label for="dbFileInput" class="btn btn-secondary btn-db-load">
+                            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            DB読込
+                        </label>
+                        <input type="file" id="dbFileInput" accept=".json" class="hidden">
+                    </div>
+
+                    <div id="dlTemplateContainer" class="tooltip-container hidden" data-tooltip="基板のシルク印字(D1, SW1等)と行列座標を紐付ける matrix-diagnoser-database.json のテンプレートをダウンロードします。リポジトリに含めるか、隣の「DB読込」から読み込ませることで、より具体的な故障箇所を表示できるようになります。">
+                        <button id="dlTemplateBtn" class="btn btn-db-template">
+                            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            テンプレート
+                        </button>
+                    </div>
                 </div>
 
                 <div id="resultArea" class="result-area hidden">
